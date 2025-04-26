@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PivotTable.js Demo</title>
+    <!-- Load dependencies -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #pivot-table-container { margin-top: 20px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>CSV PivotTable Analyzer</h1>
+    <input type="file" id="csv-file" accept=".csv">
+    <div id="pivot-table-container"></div>
+
+    <script>
+        $(function() {
+            $("#csv-file").on("change", function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    Papa.parse(e.target.result, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: function(results) {
+                            if (results.errors.length > 0) {
+                                console.warn("CSV issues:", results.errors);
+                            }
+                            if (results.data.length > 0) {
+                                renderPivotTable(results.data);
+                            } else {
+                                alert("No valid data found in CSV!");
+                            }
+                        }
+                    });
+                };
+                reader.readAsText(file);
+            });
+
+            function renderPivotTable(data) {
+                $("#pivot-table-container").pivotUI(data, {
+                    renderers: $.pivotUtilities.renderers,
+                    rendererOptions: {
+                        table: { clickCallback: function(e, value, filters) {
+                            console.log("Cell clicked:", value);
+                        }}
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,14 +1,290 @@
-<!DOCTYPE HTML>
-<html lang="en-US">
-    <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="refresh" content="1;url=examples">
-        <script type="text/javascript">
-            window.location.href = "examples"
-        </script>
-        <title>Page Redirection</title>
-    </head>
-    <body>
-        If you are not redirected automatically, follow the <a href='examples'>link to the main page</a>
-    </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <!-- Styles and Scripts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/chart_renderers.min.js"></script>
+
+    <script src="https://cdn.plot.ly/plotly-2.24.2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/plotly_renderers.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/export_renderers.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/d3_renderers.min.js"></script>
+
+
+
+    <style>
+        .node {
+        border: solid 1px white;
+        font: 10px sans-serif;
+        line-height: 12px;
+        overflow: hidden;
+        position: absolute;
+        text-indent: 2px;
+        }
+
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #pivot-table-container { margin-top: 20px; overflow: auto; }
+
+        .collapsible-section {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .toggle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        .toggle-icon {
+            font-size: 16px;
+            transition: transform 0.2s ease;
+        }
+
+        .collapsed .toggle-icon {
+            transform: rotate(90deg);
+        }
+
+        .content {
+            margin-top: 10px;
+        }
+
+        .collapsed .content {
+            display: none;
+        }
+
+        .controls button,
+        .controls input[type="file"] {
+            margin-right: 10px;
+            margin-top: 5px;
+        }
+
+        /* Styling the fallback filename input */
+        #fallback-filename {
+            width: 100%;
+            padding: 8px;
+            font-size: 14px;
+            margin-top: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Controls Section -->
+    <div class="collapsible-section" id="controls-section">
+        <div class="toggle-header">
+            <span>Controls</span>
+            <span class="toggle-icon">&#9654;</span>
+        </div>
+        <div class="content controls">
+            <label for="csv-file"><strong>Data (csv file):</strong></label>
+            <input type="file" id="csv-file" accept=".csv">
+            <br><br>
+
+            <label for="upload-config"><strong>Configuration:</strong></label>
+            <input type="file" id="upload-config" accept=".json">
+            <br><br>
+
+            <button id="download-config">Save Current Config</button>
+        </div>
+    </div>
+
+    <!-- Pivot Table Output -->
+    <div id="pivot-table-container"></div>
+
+    <!-- Fallback Save As Dialog -->
+    <div id="save-fallback-dialog" title="Save Configuration" style="display: none;">
+        <p>Enter the filename for the configuration:</p>
+        <input type="text" id="fallback-filename" value="">
+    </div>
+
+    <script>
+        let lastPivotData = null;
+        let pivotUIOptions = null;
+
+        $(function () {
+            // Toggle Controls section
+            $('#controls-section .toggle-header').on('click', function () {
+                $('#controls-section').toggleClass('collapsed');
+            });
+
+            // Handle CSV Upload
+            $("#csv-file").on("change", function (e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    Papa.parse(e.target.result, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: function (results) {
+                            if (results.errors.length > 0) {
+                                console.warn("CSV issues:", results.errors);
+                            }
+                            if (results.data.length > 0) {
+                                lastPivotData = results.data;
+                                renderPivotTable(results.data);
+                            } else {
+                                alert("No valid data found in CSV!");
+                            }
+                        }
+                    });
+                };
+                reader.readAsText(file);
+            });
+
+            // Render PivotTable
+            function renderPivotTable(data, config = {}) {
+                const renderers = $.extend(
+                    // {},
+                    $.pivotUtilities.renderers,
+                    $.pivotUtilities.chartjs_renderers,
+                    $.pivotUtilities.plotly_renderers,
+                    $.pivotUtilities.d3_renderers,
+                    $.pivotUtilities.export_renderers
+                );
+
+                const finalConfig = {
+                    renderers: renderers,
+                    rendererOptions: {
+                        table: {
+                            clickCallback: function (e, value, filters) {
+                                console.log("Cell clicked:", value);
+                            }
+                        }
+                    },
+                    onRefresh: function (updatedConfig) {
+                        pivotUIOptions = JSON.parse(JSON.stringify(updatedConfig));
+                        delete pivotUIOptions["aggregators"];
+                        delete pivotUIOptions["renderers"];
+                    },
+                    ...config
+                };
+
+                $("#pivot-table-container").pivotUI(data, finalConfig, true);
+            }
+
+            // Save Current Config
+            $("#download-config").on("click", async function () {
+                if (!pivotUIOptions) {
+                    alert("No configuration available to download.");
+                    return;
+                }
+
+                const configData = JSON.stringify(pivotUIOptions, null, 2);
+
+                // Generate dynamic filename
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                const dynamicFilename = `config-${yyyy}-${mm}-${dd}.json`;
+
+                if ('showSaveFilePicker' in window) {
+                    // Save As API
+                    try {
+                        const options = {
+                            suggestedName: dynamicFilename,
+                            types: [{
+                                description: 'JSON Files',
+                                accept: { 'application/json': ['.json'] },
+                            }],
+                        };
+                        const handle = await window.showSaveFilePicker(options);
+                        const writable = await handle.createWritable();
+                        await writable.write(new Blob([configData], { type: 'application/json' }));
+                        await writable.close();
+                        alert("Configuration saved successfully!");
+                    } catch (err) {
+                        if (err.name !== 'AbortError') {
+                            console.error("Saving failed:", err);
+                            alert("Failed to save the file.");
+                        }
+                    }
+                } else {
+                    // fallback: show filename editing dialog
+                    $("#fallback-filename").val(dynamicFilename);
+
+                    $("#save-fallback-dialog").dialog({
+                        modal: true,
+                        width: 400,
+                        show: { effect: "fade", duration: 200 },
+                        hide: { effect: "fade", duration: 200 },
+                        open: function() {
+                            $("#fallback-filename").focus().select();
+                        },
+                        buttons: {
+                            "Save": function () {
+                                let filename = $("#fallback-filename").val().trim();
+                                if (filename === "") {
+                                    filename = dynamicFilename;
+                                }
+                                if (!filename.toLowerCase().endsWith(".json")) {
+                                    filename += ".json";
+                                }
+
+                                const blob = new Blob([configData], { type: "application/json" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+
+                                $(this).dialog("close");
+                            },
+                            "Cancel": function () {
+                                $(this).dialog("close");
+                            }
+                        }
+                    });
+                }
+            });
+
+            // upload config and apply
+            $("#upload-config").on("change", function (e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    try {
+                        const config = JSON.parse(e.target.result);
+                        if (lastPivotData) {
+                            renderPivotTable(lastPivotData, config);
+                        } else {
+                            alert("Please upload a CSV file first.");
+                        }
+                    } catch (err) {
+                        alert("Invalid JSON config file.");
+                        console.error("Config parse error:", err);
+                    }
+                };
+                reader.readAsText(file);
+            });
+        });
+    </script>
+</body>
 </html>
